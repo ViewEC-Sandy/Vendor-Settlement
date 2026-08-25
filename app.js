@@ -4,7 +4,7 @@ import { getFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, serverT
 import { firebaseConfig } from "./firebase-config.js";
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
 const clean=v=>String(v??"").trim(),num=v=>Number(String(v??"").replace(/[,，NT$￥¥\s]/g,""))||0,esc=v=>String(v??"").replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[s]));
-let state={user:null,role:"viewer",sales:[],logs:[],vendors:[],products:[],adjustments:[],params:[]};
+let state={user:null,role:"viewer",sales:[],entries:[],logs:[],vendors:[],products:[],adjustments:[],params:[]};
 const canWrite=()=>state.role==="admin"||state.role==="manager";
 function setProgress(p,msg){const v=Math.max(0,Math.min(100,Math.round(p)));$("logProgressBar").style.width=v+"%";$("logProgressText").textContent=`${v}%　${msg}`}
 function setVendorProgress(p,msg){
@@ -17,11 +17,12 @@ document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>{document.quer
 document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.remove("active"));b.classList.add("active");$("logDb").classList.toggle("active",b.dataset.tab==="db");$("logImport").classList.toggle("active",b.dataset.tab==="import")});
 $("loginBtn").onclick=()=>signInWithEmailAndPassword(auth,$("email").value,$("password").value).catch(e=>alert(e.message));$("logoutBtn").onclick=()=>signOut(auth);
 onAuthStateChanged(auth,async u=>{state.user=u;state.role="viewer";if(u){const s=await getDoc(doc(db,"users",u.uid));state.role=s.exists()?(s.data().role||"viewer"):"viewer";$("authStatus").textContent=`${u.email} / ${state.role}`;await refresh()}else $("authStatus").textContent="未登入"});
-async function refresh(){await Promise.all([loadSales(),loadLogs(),loadVendors(),loadProducts(),loadAdjustments(),loadParams()]);renderOverview();renderMonthly();renderLogs();renderVendors()}
+async function refresh(){await Promise.all([loadSales(),loadEntries(),loadLogs(),loadVendors(),loadProducts(),loadAdjustments(),loadParams()]);renderOverview();renderMonthly();renderLogs();renderVendors()}
 function salesUpdatedMs(x){const v=x?.updatedAt;if(v?.toMillis)return v.toMillis();if(v?.seconds)return Number(v.seconds)*1000;const d=new Date(v||0);return isNaN(d)?0:d.getTime()}
 function salesLogicalKey(x){return [clean(x.platform).toLowerCase(),saleOrderId(x).toLowerCase(),saleProductId(x).toLowerCase(),clean(pickFirst(x,["managementNumber","商品管理番号"],"")).toLowerCase(),saleQuantity(x)].join("||")}
 function preferSalesRow(a,b){const ap=saleUnitPriceJPY(a)>0?1:0,bp=saleUnitPriceJPY(b)>0?1:0;if(ap!==bp)return bp>ap?b:a;const au=salesUpdatedMs(a),bu=salesUpdatedMs(b);return bu>=au?b:a}
 async function loadSales(){const s=await getDocs(collection(db,"sales")),raw=s.docs.map(d=>({id:d.id,...d.data()})),m=new Map();raw.forEach(x=>{const k=salesLogicalKey(x),old=m.get(k);m.set(k,old?preferSalesRow(old,x):x)});state.sales=[...m.values()]}
+async function loadEntries(){const s=await getDocs(collection(db,"settlementEntries"));state.entries=s.docs.map(d=>({id:d.id,_entry:true,...d.data()}))}
 async function loadLogs(){const s=await getDocs(collection(db,"shipmentCosts"));state.logs=s.docs.map(d=>({id:d.id,...d.data()}))}
 async function loadVendors(){const s=await getDocs(collection(db,"vendorSettlementSettings"));state.vendors=s.docs.map(d=>({id:d.id,...d.data()}))}
 async function loadProducts(){const s=await getDocs(collection(db,"products"));state.products=s.docs.map(d=>({id:d.id,...d.data()}))}
@@ -31,6 +32,7 @@ async function loadParams(){const s=await getDocs(collection(db,"monthlySettleme
 function renderOverview(){const sales=state.sales.reduce((a,x)=>a+saleLineAmountJPY(x),0),ship=state.logs.reduce((a,x)=>a+num(x.amountTWD),0);$("overviewKpis").innerHTML=[["銷售筆數",state.sales.length],["銷售收入(JPY)",Math.round(sales).toLocaleString()],["物流筆數",state.logs.length],["物流總運費(TWD)",Math.round(ship).toLocaleString()]].map(([k,v])=>`<div class="kpi">${k}<b>${v}</b></div>`).join("")}
 const MONTHLY_COLS=[
   {key:"select",label:"選取",kind:"select",default:true},
+  {key:"source",label:"資料來源",kind:"system",default:false},
   {key:"month",label:"結算月份",kind:"system",default:true},
   {key:"purchaseDate",label:"叫貨日",kind:"edit",default:true},
   {key:"projectType",label:"專案類型",kind:"edit",default:true},
@@ -73,7 +75,7 @@ function saleLineAmountJPY(s){return saleUnitPriceJPY(s)*saleQuantity(s)}
 function saleOrderId(s){return clean(pickFirst(s,["orderId","orderNumber","orderNo","注文番号"],""))}
 function saleProductId(s){return clean(pickFirst(s,["productId","sku","itemNumber","商品番号"],""))}
 function saleMonth(s){const direct=clean(pickFirst(s,["month","saleMonth"],""));if(direct)return direct.slice(0,7);const d=clean(pickFirst(s,["date","orderDate","saleDate","注文日"],""));const mm=d.match(/(\d{4})[-\/]?(\d{1,2})/);return mm?`${mm[1]}-${String(mm[2]).padStart(2,"0")}`:""}
-function monthlyAdjFor(s){return state.adjustments.find(a=>a.salesId===s.id||a.id===s.id||(clean(a.orderId)===saleOrderId(s)&&clean(a.productId)===saleProductId(s)))||{}}
+function monthlyAdjFor(s){if(s?._entry)return s;return state.adjustments.find(a=>a.salesId===s.id||a.id===s.id||(clean(a.orderId)===saleOrderId(s)&&clean(a.productId)===saleProductId(s)))||{}}
 function productFor(s){
   const sku=saleProductId(s).toLowerCase();
   const mgmt=clean(pickFirst(s,["managementNumber","productManagementNumber","商品管理番号"],"")).toLowerCase();
@@ -95,7 +97,7 @@ function monthlyRow(s){
   const st=clean(a.settlementType||vs.settlementType||""); let comm=num(a.commissionRate??vs.resaleCommissionRate??0); if(comm>1)comm/=100;
   let payment=discountedTWD;
   if(st==="代銷售")payment=discountedTWD*(1-comm); else if(st==="有抽成")payment=discountedTWD-rkFee; else if(st==="無抽成")payment=discountedTWD;
-  return {salesId:s.id,month,purchaseDate:a.purchaseDate||"",projectType:a.projectType||vs.defaultProject||"",vendorName:vname,orderId:saleOrderId(s),origin:a.origin||pickFirst(p,["origin","shippingOrigin"],""),productName:effectiveProductName(s,p),productId:saleProductId(s),unitPriceJPY:unit,quantity:qty,salesAmountJPY:sales,vendorDiscountRate:rate,vendorCampaignName:a.vendorCampaignName||"",ourDiscountJPY:ourDisc,ourCampaignName:a.ourCampaignName||"",pointsMultiplier:a.pointsMultiplier||"",pointsCostJPY:a.pointsCostJPY||"",discountedFinalJPY:discounted,fxRate:fx,discountedTWD,rakutenFeeTWD:rkFee,settlementType:st,commissionRate:comm,vendorPaymentTWD:payment,note:a.note||"",_sales:s,_adj:a};
+  return {salesId:s.id,source:s._entry?(s.source||"手動"):("Dashboard"),month,purchaseDate:a.purchaseDate||"",projectType:a.projectType||vs.defaultProject||"",vendorName:vname,orderId:saleOrderId(s),origin:a.origin||pickFirst(p,["origin","shippingOrigin"],""),productName:effectiveProductName(s,p),productId:saleProductId(s),unitPriceJPY:unit,quantity:qty,salesAmountJPY:sales,vendorDiscountRate:rate,vendorCampaignName:a.vendorCampaignName||"",ourDiscountJPY:ourDisc,ourCampaignName:a.ourCampaignName||"",pointsMultiplier:a.pointsMultiplier||"",pointsCostJPY:a.pointsCostJPY||"",discountedFinalJPY:discounted,fxRate:fx,discountedTWD,rakutenFeeTWD:rkFee,settlementType:st,commissionRate:comm,vendorPaymentTWD:payment,note:a.note||"",_sales:s,_adj:a};
 }
 function fmtMonthly(key,v){if(["unitPriceJPY","salesAmountJPY","ourDiscountJPY","pointsCostJPY","discountedFinalJPY"].includes(key))return v===""?"":Math.round(num(v)).toLocaleString();if(["discountedTWD","rakutenFeeTWD","vendorPaymentTWD"].includes(key))return v===""?"":num(v).toFixed(2);if(["vendorDiscountRate","commissionRate"].includes(key))return v===""?"":`${(num(v)*100).toFixed(1).replace(/\.0$/,"")}%`;if(key==="fxRate")return v?num(v).toFixed(6):"";return clean(v)}
 const monthlyFieldFilters={};
@@ -113,7 +115,7 @@ function passesMonthlyFieldFilters(row){
 }
 function monthlyBaseRows(){
   const q=clean($("monthlySearch").value).toLowerCase(),m=$("monthlyMonth").value,pr=clean($("monthlyProject").value).toLowerCase(),ve=clean($("monthlyVendor").value).toLowerCase(),st=$("monthlySettlement").value;
-  return state.sales.map(monthlyRow).filter(r=>(!q||[r.orderId,r.productId,r.productName,r.vendorName].some(x=>clean(x).toLowerCase().includes(q)))&&(!m||r.month===m)&&(!pr||clean(r.projectType).toLowerCase().includes(pr))&&(!ve||clean(r.vendorName).toLowerCase().includes(ve))&&(!st||r.settlementType===st));
+  return [...state.sales,...state.entries].map(monthlyRow).filter(r=>(!q||[r.orderId,r.productId,r.productName,r.vendorName].some(x=>clean(x).toLowerCase().includes(q)))&&(!m||r.month===m)&&(!pr||clean(r.projectType).toLowerCase().includes(pr))&&(!ve||clean(r.vendorName).toLowerCase().includes(ve))&&(!st||r.settlementType===st));
 }
 function monthlyFilteredRows(){return monthlyBaseRows().filter(passesMonthlyFieldFilters)}
 function renderMonthly(){
@@ -136,7 +138,7 @@ function renderMonthly(){
     if(c.key==="unitPriceJPY"&&num(r.unitPriceJPY)===0)return `<td class="${cls} col-unitPriceJPY missing-value" title="原始 sales 明細缺少可辨識的單價欄位">—</td>`;
     return `<td class="${cls} col-${esc(c.key)}">${esc(display)}</td>`;
   }).join("")}</tr>`).join("")}</tbody>`;
-  document.querySelectorAll("[data-edit-monthly]").forEach(b=>b.onclick=()=>editMonthlyAdjustment(b.dataset.editMonthly));
+  document.querySelectorAll("[data-edit-monthly]").forEach(b=>b.onclick=()=>editMonthlyRecord(b.dataset.editMonthly));
   document.querySelectorAll("[data-month-filter]").forEach(sel=>sel.onchange=()=>{
     if(sel.value)monthlyFieldFilters[sel.dataset.monthFilter]=sel.value;else delete monthlyFieldFilters[sel.dataset.monthFilter];
     renderMonthly();
@@ -149,7 +151,21 @@ $("monthlyColumnsBtn").onclick=()=>{$("monthlyColumnsPanel").classList.toggle("h
 $("monthlyFilterToggle").onclick=()=>{monthlyFieldFiltersVisible=!monthlyFieldFiltersVisible;renderMonthly()};
 $("monthlyClearFilters").onclick=()=>{Object.keys(monthlyFieldFilters).forEach(k=>delete monthlyFieldFilters[k]);$("monthlySearch").value="";$("monthlyMonth").value="";$("monthlyProject").value="";$("monthlyVendor").value="";$("monthlySettlement").value="";renderMonthly()};
 ["monthlySearch","monthlyProject","monthlyVendor"].forEach(id=>$(id).oninput=renderMonthly);$("monthlyMonth").onchange=renderMonthly;$("monthlySettlement").onchange=renderMonthly;
-$("monthlyRefresh").onclick=async()=>{await Promise.all([loadSales(),loadProducts(),loadAdjustments(),loadVendors(),loadParams()]);renderMonthly()};
+$("monthlyRefresh").onclick=async()=>{await Promise.all([loadSales(),loadEntries(),loadProducts(),loadAdjustments(),loadVendors(),loadParams()]);renderMonthly()};
+const MANUAL_COLS=[["month","結算月份(YYYY-MM)"],["orderId","訂單編號（可留空，自動產生）"],["productId","SKU管理編號"],["unitPriceJPY","日幣單價"],["quantity","數量"],["vendorDiscountRate","折數（例如80%或0.8）"],["vendorCampaignName","活動名稱(廠商負擔)"],["ourDiscountJPY","折扣額(我方負擔/JPY)"],["note","備註"]];
+function normalizeDiscountRate(v){const raw=clean(v);if(!raw)return 1;let x=num(raw.replace(/[%％]/g,""));if(raw.includes("%")||raw.includes("％")||x>1)x/=100;return x>0?x:1}
+function manualDocId(v){const month=clean(v.month)||new Date().toISOString().slice(0,7),order=clean(v.orderId)||`MANUAL-${Date.now()}`,sku=clean(v.productId);return encodeURIComponent(`${month}__${order}__${sku}`)}
+async function saveManualEntry(v,id=null,source="手動"){
+  if(!clean(v.productId))throw new Error("SKU管理編號為必填");
+  if(!clean(v.month))throw new Error("結算月份為必填");
+  const orderId=clean(v.orderId)||`MANUAL-${new Date().toISOString().replace(/\D/g,"").slice(0,14)}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
+  const payload={source,month:clean(v.month).slice(0,7),orderId,productId:clean(v.productId),unitPriceJPY:num(v.unitPriceJPY),quantity:Math.max(1,num(v.quantity)||1),vendorDiscountRate:normalizeDiscountRate(v.vendorDiscountRate),vendorCampaignName:clean(v.vendorCampaignName),ourDiscountJPY:num(v.ourDiscountJPY),note:clean(v.note),updatedAt:serverTimestamp()};
+  const key=id||manualDocId({...payload,orderId});await setDoc(doc(db,"settlementEntries",key),payload,{merge:true});return key;
+}
+$("manualEntryBtn").onclick=()=>{if(!canWrite())return alert("目前帳號沒有寫入權限");openEditor("新增月結單筆資料",MANUAL_COLS,{month:$("monthlyMonth").value||new Date().toISOString().slice(0,7),quantity:1,vendorDiscountRate:1},async v=>{const key=await saveManualEntry(v,null,"手動");await audit("settlementEntries",key,"create",{},v);await loadEntries();renderMonthly()})};
+function editMonthlyRecord(id){const e=state.entries.find(x=>x.id===id);if(!e)return editMonthlyAdjustment(id);if(!canWrite())return alert("目前帳號沒有寫入權限");openEditor("編輯直接月結資料",MANUAL_COLS,e,async v=>{const old={...e};const key=await saveManualEntry(v,id,e.source||"手動");await audit("settlementEntries",key,"edit",old,v);await loadEntries();renderMonthly()})}
+function setManualProgress(p,msg){const v=Math.max(0,Math.min(100,Math.round(Number(p)||0)));$("manualProgressBar").style.width=v+"%";$("manualProgressText").textContent=`${v}%　${msg}`}
+$("manualImportBtn").onclick=async()=>{if(!canWrite())return alert("目前帳號沒有寫入權限");const file=$("manualImportFile").files?.[0];if(!file)return alert("請先選擇 Excel / CSV");try{setManualProgress(5,"讀取檔案");const rows=await readWorkbook(file);if(!rows.length)throw new Error("檔案沒有資料");const aliases={month:["結算月份","月份","month"],orderId:["訂單編號","注文番号","orderid"],productId:["SKU管理編號","SKU管理番号","商品番号","sku"],unitPriceJPY:["日幣單價","単価","unitpricejpy"],quantity:["數量","商品件數","個数","quantity"],vendorDiscountRate:["折數","折數(廠商負擔)","廠商折數"],vendorCampaignName:["活動名稱(廠商負擔)","廠商活動名稱"],ourDiscountJPY:["折扣額(我方負擔/JPY)","折扣額(我方負擔)","我方折扣額"],note:["備註","note"]};let hr=-1,map={};for(let i=0;i<Math.min(rows.length,20);i++){const hs=(rows[i]||[]).map(x=>clean(x).replace(/\s+/g,"").toLowerCase());let m={};for(const [k,ls] of Object.entries(aliases)){const targets=ls.map(x=>x.replace(/\s+/g,"").toLowerCase()),j=hs.findIndex(h=>targets.includes(h));if(j>=0)m[k]=j}if(m.productId!==undefined&&m.unitPriceJPY!==undefined&&m.quantity!==undefined){hr=i;map=m;break}}if(hr<0)throw new Error("至少需要 SKU管理編號、日幣單價、數量 三個表頭");const defaultMonth=$("monthlyMonth").value;const data=rows.slice(hr+1).map((r,i)=>{let x={};for(const [k,j] of Object.entries(map))x[k]=clean(r[j]);x.month=x.month||defaultMonth;return x}).filter(x=>x.productId);if(!data.length)throw new Error("沒有可匯入資料；若檔案沒有結算月份，請先在頁面選擇月份");if(data.some(x=>!x.month))throw new Error("部分資料沒有結算月份，請在檔案加入『結算月份』或先於頁面選擇月份");setManualProgress(35,`辨識 ${data.length} 筆，準備寫入`);if(!confirm(`將直接新增/更新 ${data.length} 筆月結資料。確定？`))return setManualProgress(0,"已取消");for(let i=0;i<data.length;i+=150){const chunk=data.slice(i,i+150),b=writeBatch(db);for(const v of chunk){const orderId=clean(v.orderId)||`MANUAL-${v.month}-${String(i).padStart(5,"0")}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,payload={source:"批量匯入",month:clean(v.month).slice(0,7),orderId,productId:clean(v.productId),unitPriceJPY:num(v.unitPriceJPY),quantity:Math.max(1,num(v.quantity)||1),vendorDiscountRate:normalizeDiscountRate(v.vendorDiscountRate),vendorCampaignName:clean(v.vendorCampaignName),ourDiscountJPY:num(v.ourDiscountJPY),note:clean(v.note),updatedAt:serverTimestamp()},key=manualDocId(payload);b.set(doc(db,"settlementEntries",key),payload,{merge:true})}await b.commit();setManualProgress(40+55*Math.min(1,(i+chunk.length)/data.length),`寫入 ${Math.min(i+chunk.length,data.length)} / ${data.length}`)}await audit("settlementEntries","batch","import",{}, {fileName:file.name,count:data.length});await loadEntries();renderMonthly();setManualProgress(100,`完成：${data.length} 筆`);$("manualImportFile").value=""}catch(e){console.error(e);setManualProgress(100,"匯入失敗："+e.message)}};
 const ADJ_COLS=[["purchaseDate","叫貨日"],["projectType","專案類型"],["vendorName","廠商名"],["origin","發貨地(TW/JP)"],["vendorDiscountRate","折數(廠商負擔，例如80%或0.8)"],["vendorCampaignName","活動名稱(廠商負擔)"],["ourDiscountJPY","折扣額(我方負擔/JPY)"],["ourCampaignName","活動名稱(我方負擔)"],["pointsMultiplier","點數倍率"],["pointsCostJPY","點數成本(JPY)"],["settlementType","結帳方式"],["commissionRate","個別抽成率(選填)"],["note","備註"]];
 function editMonthlyAdjustment(salesId){if(!canWrite())return alert("目前帳號沒有寫入權限");const row=monthlyRow(state.sales.find(s=>s.id===salesId)),old=monthlyAdjFor(row._sales);openEditor("月結人工調整",ADJ_COLS,row,async v=>{const payload={salesId,orderId:row.orderId,productId:row.productId,updatedAt:serverTimestamp()};ADJ_COLS.forEach(([k])=>{if(v[k]!=="")payload[k]=v[k]});if(payload.vendorDiscountRate!==undefined){let x=num(payload.vendorDiscountRate);if(x>1)x/=100;payload.vendorDiscountRate=x}if(payload.commissionRate!==undefined){let x=num(payload.commissionRate);if(x>1)x/=100;payload.commissionRate=x}await setDoc(doc(db,"settlementAdjustments",salesId),payload,{merge:true});await audit("settlementAdjustments",salesId,"edit",old,payload);await loadAdjustments();renderMonthly()})}
 $("monthlyBatchBtn").onclick=()=>{if(!canWrite())return alert("目前帳號沒有寫入權限");const ids=[...document.querySelectorAll(".monthly-select:checked")].map(x=>x.value);if(!ids.length)return alert("請先勾選要修改的商品明細");openEditor(`批量修改 ${ids.length} 筆`,ADJ_COLS,{},async v=>{const b=writeBatch(db);ids.forEach(id=>{const s=state.sales.find(x=>x.id===id),r=monthlyRow(s),payload={salesId:id,orderId:r.orderId,productId:r.productId,updatedAt:serverTimestamp()};ADJ_COLS.forEach(([k])=>{if(v[k]!=="")payload[k]=v[k]});if(payload.vendorDiscountRate!==undefined){let x=num(payload.vendorDiscountRate);if(x>1)x/=100;payload.vendorDiscountRate=x}if(payload.commissionRate!==undefined){let x=num(payload.commissionRate);if(x>1)x/=100;payload.commissionRate=x}b.set(doc(db,"settlementAdjustments",id),payload,{merge:true})});await b.commit();await audit("settlementAdjustments","batch","batch-edit",{}, {count:ids.length});await loadAdjustments();renderMonthly()})};

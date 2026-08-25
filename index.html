@@ -1,5 +1,5 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1.4.1</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
-<aside><h1>Vendor Settlement</h1><small>V1.4</small><nav id="nav">
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1.5</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
+<aside><h1>Vendor Settlement</h1><small>V1.5</small><nav id="nav">
 <button data-page="overview" class="active">對帳總覽</button><button data-page="monthly">月結明細</button><button data-page="logistics">物流運費</button><button data-page="vendors">廠商結算設定</button><button data-page="params">月結參數</button><button data-page="audit">對帳檢查</button><button data-page="export">匯出資料</button></nav></aside>
 <main><header><strong id="pageTitle">對帳總覽</strong><div class="row"><span id="authStatus">未登入</span><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><button id="loginBtn">登入</button><button id="logoutBtn">登出</button></div></header>
 <section id="overview" class="page active"><div class="kpis" id="overviewKpis"></div><div class="card"><h2>共用資料</h2><p>本網站與既有 Japan EC Dashboard 共用同一個 Firebase / Firestore。商品主檔與銷售 CSV 不需重複上傳。</p></div></section>
@@ -16,13 +16,17 @@
     <button id="monthlyFilterToggle">欄位篩選</button>
     <button id="monthlyClearFilters">清除篩選</button>
     <button id="monthlyBatchBtn">批量修改</button>
+    <button id="manualEntryBtn">＋ 新增單筆資料</button>
+    <input id="manualImportFile" type="file" accept=".xlsx,.xls,.csv">
+    <button id="manualImportBtn">批量匯入月結資料</button>
     <input id="adjustmentImportFile" type="file" accept=".xlsx,.xls,.csv">
     <button id="adjustmentImportBtn">匯入調整資料</button>
     <button id="monthlyRefresh">重新整理</button>
     <button id="monthlyExport">匯出目前結果</button>
   </div>
-  <p class="note">灰底＝原始銷售/商品主檔/系統計算；白底＝Vendor Settlement 人工調整。商品名固定讀取商品主檔中文名，畫面只顯示前15字；匯出仍保留完整中文名。每個欄位皆可使用表頭下拉選單篩選。</p>
+  <p class="note">支援兩種資料來源：Japan EC Dashboard 共用銷售資料，或直接在 Vendor Settlement 單筆新增／批量匯入。灰底＝原始/商品主檔/系統計算；白底＝人工輸入。商品名固定讀取商品主檔中文名，畫面只顯示前15字；匯出仍保留完整中文名。每個欄位皆可使用表頭下拉選單篩選。</p>
   <div id="monthlyColumnsPanel" class="column-panel hidden"></div>
+  <div class="progress"><div id="manualProgressBar"></div></div><div id="manualProgressText">等待直接匯入月結資料</div>
   <div class="progress"><div id="adjustmentProgressBar"></div></div>
   <div id="adjustmentProgressText">等待調整資料匯入</div>
 </div>
