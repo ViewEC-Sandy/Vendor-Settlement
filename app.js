@@ -7,6 +7,11 @@ const clean=v=>String(v??"").trim(),num=v=>Number(String(v??"").replace(/[,，NT
 let state={user:null,role:"viewer",sales:[],logs:[],vendors:[]};
 const canWrite=()=>state.role==="admin"||state.role==="manager";
 function setProgress(p,msg){const v=Math.max(0,Math.min(100,Math.round(p)));$("logProgressBar").style.width=v+"%";$("logProgressText").textContent=`${v}%　${msg}`}
+function setVendorProgress(p,msg){
+  const v=Math.max(0,Math.min(100,Math.round(Number(p)||0)));
+  $("vendorProgressBar").style.width=v+"%";
+  $("vendorProgressText").textContent=`${v}%　${msg}`;
+}
 
 document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));$(b.dataset.page).classList.add("active");$("pageTitle").textContent=b.textContent});
 document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.remove("active"));b.classList.add("active");$("logDb").classList.toggle("active",b.dataset.tab==="db");$("logImport").classList.toggle("active",b.dataset.tab==="import")});
@@ -26,6 +31,171 @@ function editLog(id){if(!canWrite())return alert("目前帳號沒有寫入權限
 const vendorCols=[["vendorName","廠商名"],["defaultProject","預設專案"],["settlementType","結帳方式"],["resaleCommissionRate","代銷售抽成率"]];
 function renderVendors(){$("vendorTable").innerHTML=`<thead><tr>${vendorCols.map(c=>`<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${state.vendors.map(r=>`<tr>${vendorCols.map(c=>`<td>${esc(r[c[0]])}</td>`).join("")}<td><button data-editvendor="${r.id}">編輯</button></td></tr>`).join("")}</tbody>`;document.querySelectorAll("[data-editvendor]").forEach(b=>b.onclick=()=>editVendor(b.dataset.editvendor))}
 $("addVendor").onclick=()=>editVendor(null);function editVendor(id){if(!canWrite())return alert("目前帳號沒有寫入權限");const row=id?state.vendors.find(x=>x.id===id):{};openEditor("廠商設定",vendorCols,row,async v=>{const key=id||encodeURIComponent(v.vendorName||crypto.randomUUID());await setDoc(doc(db,"vendorSettlementSettings",key),{...v,updatedAt:serverTimestamp()},{merge:true});await audit("vendorSettlementSettings",key,id?"edit":"create",row,v);await loadVendors();renderVendors()})}
+
+function normalizeVendorHeader(v){
+  return clean(v).replace(/\s+/g,"").toLowerCase();
+}
+function normalizeRate(v){
+  const raw=clean(v);
+  if(!raw)return null;
+  const hasPct=raw.includes("%")||raw.includes("％");
+  const value=Number(raw.replace(/[%％,\s]/g,""));
+  if(!Number.isFinite(value))return null;
+  if(hasPct)return value/100;
+  if(value>1)return value/100;
+  return value;
+}
+function normalizeSettlementType(v){
+  const s=clean(v);
+  if(!s)return "";
+  const key=s.replace(/\s+/g,"");
+  if(["代銷售","代銷","resale"].includes(key.toLowerCase()))return "代銷售";
+  if(["有抽成","抽成","commission"].includes(key.toLowerCase()))return "有抽成";
+  if(["無抽成","不抽成","none"].includes(key.toLowerCase()))return "無抽成";
+  return s;
+}
+async function readVendorImportFile(file){
+  setVendorProgress(5,`讀取檔案：${file.name}`);
+  const rows=await readWorkbook(file);
+  setVendorProgress(20,`已讀取 ${rows.length.toLocaleString()} 列，辨識表頭…`);
+  return rows;
+}
+$("vendorImportBtn").onclick=async()=>{
+  if(!canWrite())return alert("目前帳號沒有寫入權限");
+  const file=$("vendorImportFile").files?.[0];
+  if(!file)return alert("請先選擇廠商設定檔");
+  $("vendorImportBtn").disabled=true;
+  $("vendorImportFile").disabled=true;
+  try{
+    const rows=await readVendorImportFile(file);
+    if(!rows.length)throw new Error("檔案沒有資料");
+
+    // 自動尋找前 20 列中的表頭，避免 Excel 前面有標題或空白列
+    const aliases={
+      vendorName:["廠商名","廠商名稱","vendor","vendorname","supplier","suppliername"],
+      defaultProject:["預設專案","專案","專案類型","defaultproject","project"],
+      settlementType:["結帳方式","結算方式","settlementtype","settlement"],
+      resaleCommissionRate:["代銷售抽成率","代銷抽成率","抽成率","resalecommissionrate","commissionrate"]
+    };
+    let headerRow=-1, idx={};
+    for(let r=0;r<Math.min(rows.length,20);r++){
+      const normalized=(rows[r]||[]).map(normalizeVendorHeader);
+      const mapIdx={};
+      Object.entries(aliases).forEach(([key,list])=>{
+        const targets=list.map(normalizeVendorHeader);
+        const i=normalized.findIndex(h=>targets.includes(h));
+        if(i>=0)mapIdx[key]=i;
+      });
+      if(mapIdx.vendorName!==undefined){
+        headerRow=r;idx=mapIdx;break;
+      }
+    }
+    if(headerRow<0)throw new Error("找不到「廠商名」表頭");
+    setVendorProgress(30,`辨識表頭完成：第 ${headerRow+1} 列`);
+
+    const parsed=[];
+    const errors=[];
+    for(let r=headerRow+1;r<rows.length;r++){
+      const row=rows[r]||[];
+      const vendorName=clean(row[idx.vendorName]);
+      if(!vendorName)continue;
+      const rawRate=idx.resaleCommissionRate!==undefined?row[idx.resaleCommissionRate]:"";
+      const rate=clean(rawRate)===""?null:normalizeRate(rawRate);
+      if(clean(rawRate)!==""&&rate===null){
+        errors.push(`第 ${r+1} 列：代銷售抽成率「${rawRate}」無法辨識`);
+        continue;
+      }
+      parsed.push({
+        sourceRow:r+1,
+        vendorName,
+        defaultProject:idx.defaultProject!==undefined?clean(row[idx.defaultProject]):"",
+        settlementType:idx.settlementType!==undefined?normalizeSettlementType(row[idx.settlementType]):"",
+        resaleCommissionRate:rate
+      });
+    }
+    if(!parsed.length)throw new Error("沒有可匯入的廠商資料");
+    setVendorProgress(45,`解析完成：${parsed.length.toLocaleString()} 筆`);
+
+    const existingByName=new Map(state.vendors.map(v=>[clean(v.vendorName).toLowerCase(),v]));
+    const mode=$("vendorImportMode").value;
+    const adds=[],updates=[],skips=[];
+    parsed.forEach(item=>{
+      const old=existingByName.get(item.vendorName.toLowerCase());
+      if(!old){
+        adds.push(item);
+      }else if(mode==="update"){
+        updates.push({...item,_old:old});
+      }else{
+        skips.push(item);
+      }
+    });
+
+    $("vendorImportPreview").textContent=
+`表頭：第 ${headerRow+1} 列
+辨識欄位：${Object.keys(idx).join("、")}
+總資料：${parsed.length}
+預計新增：${adds.length}
+預計更新：${updates.length}
+既有跳過：${skips.length}
+格式錯誤：${errors.length}${errors.length?`\n\n${errors.slice(0,8).join("\n")}${errors.length>8?`\n…另有 ${errors.length-8} 筆`:''}`:""}`;
+
+    setVendorProgress(55,"等待確認");
+    if(!confirm(`廠商設定匯入：新增 ${adds.length} 筆、更新 ${updates.length} 筆、跳過 ${skips.length} 筆。確定寫入？`)){
+      setVendorProgress(0,"已取消");
+      return;
+    }
+
+    const todo=[
+      ...adds.map(x=>({type:"add",item:x})),
+      ...updates.map(x=>({type:"update",item:x}))
+    ];
+    const chunkSize=200;
+    for(let start=0;start<todo.length;start+=chunkSize){
+      const chunk=todo.slice(start,start+chunkSize);
+      const batch=writeBatch(db);
+      chunk.forEach(op=>{
+        const item=op.item;
+        const old=op.type==="update"?item._old:null;
+        const key=old?.id||encodeURIComponent(item.vendorName);
+        const payload={vendorName:item.vendorName,updatedAt:serverTimestamp()};
+        if(op.type==="add"){
+          payload.defaultProject=item.defaultProject||"";
+          payload.settlementType=item.settlementType||"";
+          payload.resaleCommissionRate=item.resaleCommissionRate??null;
+        }else{
+          // 更新模式：空白不覆蓋
+          if(item.defaultProject!=="")payload.defaultProject=item.defaultProject;
+          if(item.settlementType!=="")payload.settlementType=item.settlementType;
+          if(item.resaleCommissionRate!==null)payload.resaleCommissionRate=item.resaleCommissionRate;
+        }
+        batch.set(doc(db,"vendorSettlementSettings",key),payload,{merge:true});
+      });
+      await batch.commit();
+      const done=Math.min(start+chunk.length,todo.length);
+      setVendorProgress(60+35*(done/Math.max(1,todo.length)),`寫入資料庫 ${done} / ${todo.length}`);
+    }
+
+    await audit("vendorSettlementSettings","batch","import",{},{
+      fileName:file.name,
+      total:parsed.length,
+      added:adds.length,
+      updated:updates.length,
+      skipped:skips.length,
+      invalid:errors.length
+    });
+
+    await loadVendors();
+    renderVendors();
+    setVendorProgress(100,`完成：新增 ${adds.length}、更新 ${updates.length}、跳過 ${skips.length}、錯誤 ${errors.length}`);
+    $("vendorImportFile").value="";
+  }catch(e){
+    console.error(e);
+    setVendorProgress(100,"匯入失敗："+e.message);
+  }finally{
+    $("vendorImportBtn").disabled=false;
+    $("vendorImportFile").disabled=false;
+  }
+};
 function openEditor(title,cols,row,onSave){$("editTitle").textContent=title;$("editFields").innerHTML=cols.map(([k,l])=>`<label>${l}<input name="${k}" value="${esc(row?.[k]??"")}"></label>`).join("");$("editDialog").showModal();$("editSave").onclick=async e=>{e.preventDefault();const fd=new FormData($("editForm")),v={};cols.forEach(([k])=>v[k]=fd.get(k));await onSave(v);$("editDialog").close()}}
 function readWorkbook(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{try{const wb=XLSX.read(r.result,{type:"array"}),ws=wb.Sheets[wb.SheetNames[0]];resolve(XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""}))}catch(e){reject(e)}};r.onerror=()=>reject(r.error);r.readAsArrayBuffer(file)})}
 const map={"shipment date":"shipmentDate","shipment no.":"shipmentNo","reference":"orderId","service":"service","origin":"origin","destination":"destination","pieces":"pieces","weight (kg)":"chargeWeightKg","amount (twd)":"amountTWD"};

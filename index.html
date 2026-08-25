@@ -1,5 +1,5 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
-<aside><h1>Vendor Settlement</h1><small>V1.0</small><nav id="nav">
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1.1</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
+<aside><h1>Vendor Settlement</h1><small>V1.1</small><nav id="nav">
 <button data-page="overview" class="active">對帳總覽</button><button data-page="monthly">月結明細</button><button data-page="logistics">物流運費</button><button data-page="vendors">廠商結算設定</button><button data-page="params">月結參數</button><button data-page="audit">對帳檢查</button><button data-page="export">匯出資料</button></nav></aside>
 <main><header><strong id="pageTitle">對帳總覽</strong><div class="row"><span id="authStatus">未登入</span><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><button id="loginBtn">登入</button><button id="logoutBtn">登出</button></div></header>
 <section id="overview" class="page active"><div class="kpis" id="overviewKpis"></div><div class="card"><h2>共用資料</h2><p>本網站與既有 Japan EC Dashboard 共用同一個 Firebase / Firestore。商品主檔與銷售 CSV 不需重複上傳。</p></div></section>
@@ -7,7 +7,26 @@
 <section id="logistics" class="page"><div class="tabs"><button data-tab="db" class="active">運費資料庫</button><button data-tab="import">批量匯入</button></div>
 <div id="logDb" class="tab active"><div class="toolbar"><input id="logSearch" placeholder="訂單編號 / 出貨單號"><input id="logMonth" type="month"><button id="addLog">新增</button><button id="logExport">匯出</button></div><div class="table-wrap"><table id="logTable"></table></div></div>
 <div id="logImport" class="tab"><div class="card"><h2>物流資料匯入</h2><p>第15列為表頭，第16列開始資料。支援 XLSX / XLS / CSV。</p><input id="logFile" type="file" accept=".xlsx,.xls,.csv"><select id="logMode"><option value="skip">新增模式（重複跳過）</option><option value="update">更新模式（空白不覆蓋）</option></select><button id="logImportBtn">開始匯入</button><div class="progress"><div id="logProgressBar"></div></div><div id="logProgressText">等待上傳</div><pre id="logPreview"></pre></div></div></section>
-<section id="vendors" class="page"><div class="toolbar"><button id="addVendor">新增廠商</button><button id="vendorExport">匯出</button></div><div class="table-wrap"><table id="vendorTable"></table></div></section>
+<section id="vendors" class="page">
+<div class="card">
+  <h2>廠商結算設定</h2>
+  <div class="toolbar">
+    <button id="addVendor">新增廠商</button>
+    <input id="vendorImportFile" type="file" accept=".xlsx,.xls,.csv">
+    <select id="vendorImportMode">
+      <option value="skip">新增模式（既有廠商跳過）</option>
+      <option value="update">更新模式（空白不覆蓋）</option>
+    </select>
+    <button id="vendorImportBtn">匯入</button>
+    <button id="vendorExport">匯出</button>
+  </div>
+  <p class="note">支援欄位：廠商名、預設專案、結帳方式、代銷售抽成率。抽成率可填 10%、0.1 或 10，系統會自動辨識。</p>
+  <div class="progress"><div id="vendorProgressBar"></div></div>
+  <div id="vendorProgressText">等待選擇廠商設定檔</div>
+  <pre id="vendorImportPreview"></pre>
+</div>
+<div class="table-wrap"><table id="vendorTable"></table></div>
+</section>
 <section id="params" class="page"><div class="card"><h2>月結參數</h2><div class="grid"><label>月份<input id="paramMonth" type="month"></label><label>匯率類型<select id="fxType"><option value="spot">即期</option><option value="cash">現金</option></select></label><label>臺銀買入<input id="fxBuy" type="number" step="0.000001"></label><label>臺銀賣出<input id="fxSell" type="number" step="0.000001"></label><label>平均匯率<input id="fxAvg" type="number" step="0.000001" readonly></label><label>Rakuten成交手續費率<input id="rakutenRate" type="number" step="0.001" value="0.10"></label><label>當月倉儲總額(TWD)<input id="warehouseTotal" type="number"></label><label>狀態<select id="locked"><option value="false">未鎖定</option><option value="true">已鎖定</option></select></label></div><button id="saveParams">儲存</button><p class="note">匯率規則：臺灣銀行每月最後一個工作日之買入與賣出平均。V1先保留手動輸入/鎖定；自動抓取建議下一版用後端或 Cloud Function。</p></div></section>
 <section id="audit" class="page"><div class="card"><button id="runAudit">執行檢查</button><div id="auditResults"></div></div></section>
 <section id="export" class="page"><div class="card"><button id="exportMonthly">匯出月結明細</button><button id="exportLog">匯出物流資料</button><button id="exportVendor">匯出廠商設定</button></div></section>
