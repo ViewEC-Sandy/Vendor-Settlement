@@ -1,9 +1,31 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1.1</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
-<aside><h1>Vendor Settlement</h1><small>V1.1</small><nav id="nav">
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vendor Settlement Dashboard V1.2</title><link rel="stylesheet" href="./styles.css"><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script></head><body>
+<aside><h1>Vendor Settlement</h1><small>V1.2</small><nav id="nav">
 <button data-page="overview" class="active">對帳總覽</button><button data-page="monthly">月結明細</button><button data-page="logistics">物流運費</button><button data-page="vendors">廠商結算設定</button><button data-page="params">月結參數</button><button data-page="audit">對帳檢查</button><button data-page="export">匯出資料</button></nav></aside>
 <main><header><strong id="pageTitle">對帳總覽</strong><div class="row"><span id="authStatus">未登入</span><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><button id="loginBtn">登入</button><button id="logoutBtn">登出</button></div></header>
 <section id="overview" class="page active"><div class="kpis" id="overviewKpis"></div><div class="card"><h2>共用資料</h2><p>本網站與既有 Japan EC Dashboard 共用同一個 Firebase / Firestore。商品主檔與銷售 CSV 不需重複上傳。</p></div></section>
-<section id="monthly" class="page"><div class="toolbar"><input id="monthlySearch" placeholder="搜尋訂單 / SKU"><button id="monthlyRefresh">重新整理</button><button id="monthlyExport">匯出</button></div><div class="table-wrap"><table id="monthlyTable"></table></div></section>
+<section id="monthly" class="page">
+<div class="card">
+  <h2>月結明細</h2>
+  <div class="toolbar">
+    <input id="monthlyMonth" type="month" title="結算月份">
+    <input id="monthlyProject" placeholder="專案類型">
+    <input id="monthlyVendor" placeholder="廠商名">
+    <select id="monthlySettlement"><option value="">全部結帳方式</option><option>代銷售</option><option>有抽成</option><option>無抽成</option></select>
+    <input id="monthlySearch" placeholder="搜尋訂單 / SKU / 商品名">
+    <button id="monthlyColumnsBtn">顯示欄位</button>
+    <button id="monthlyBatchBtn">批量修改</button>
+    <input id="adjustmentImportFile" type="file" accept=".xlsx,.xls,.csv">
+    <button id="adjustmentImportBtn">匯入調整資料</button>
+    <button id="monthlyRefresh">重新整理</button>
+    <button id="monthlyExport">匯出目前結果</button>
+  </div>
+  <p class="note">灰底＝原始銷售/商品主檔/系統計算；白底＝Vendor Settlement 人工調整。商品名畫面只顯示前15字，匯出仍保留完整名稱。</p>
+  <div id="monthlyColumnsPanel" class="column-panel hidden"></div>
+  <div class="progress"><div id="adjustmentProgressBar"></div></div>
+  <div id="adjustmentProgressText">等待調整資料匯入</div>
+</div>
+<div class="table-wrap monthly-table-wrap"><table id="monthlyTable"></table></div>
+</section>
 <section id="logistics" class="page"><div class="tabs"><button data-tab="db" class="active">運費資料庫</button><button data-tab="import">批量匯入</button></div>
 <div id="logDb" class="tab active"><div class="toolbar"><input id="logSearch" placeholder="訂單編號 / 出貨單號"><input id="logMonth" type="month"><button id="addLog">新增</button><button id="logExport">匯出</button></div><div class="table-wrap"><table id="logTable"></table></div></div>
 <div id="logImport" class="tab"><div class="card"><h2>物流資料匯入</h2><p>第15列為表頭，第16列開始資料。支援 XLSX / XLS / CSV。</p><input id="logFile" type="file" accept=".xlsx,.xls,.csv"><select id="logMode"><option value="skip">新增模式（重複跳過）</option><option value="update">更新模式（空白不覆蓋）</option></select><button id="logImportBtn">開始匯入</button><div class="progress"><div id="logProgressBar"></div></div><div id="logProgressText">等待上傳</div><pre id="logPreview"></pre></div></div></section>
