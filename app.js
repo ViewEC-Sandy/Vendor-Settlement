@@ -18,7 +18,10 @@ document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.query
 $("loginBtn").onclick=()=>signInWithEmailAndPassword(auth,$("email").value,$("password").value).catch(e=>alert(e.message));$("logoutBtn").onclick=()=>signOut(auth);
 onAuthStateChanged(auth,async u=>{state.user=u;state.role="viewer";if(u){const s=await getDoc(doc(db,"users",u.uid));state.role=s.exists()?(s.data().role||"viewer"):"viewer";$("authStatus").textContent=`${u.email} / ${state.role}`;await refresh()}else $("authStatus").textContent="未登入"});
 async function refresh(){await Promise.all([loadSales(),loadLogs(),loadVendors(),loadProducts(),loadAdjustments(),loadParams()]);renderOverview();renderMonthly();renderLogs();renderVendors()}
-async function loadSales(){const s=await getDocs(collection(db,"sales"));state.sales=s.docs.map(d=>({id:d.id,...d.data()}))}
+function salesUpdatedMs(x){const v=x?.updatedAt;if(v?.toMillis)return v.toMillis();if(v?.seconds)return Number(v.seconds)*1000;const d=new Date(v||0);return isNaN(d)?0:d.getTime()}
+function salesLogicalKey(x){return [clean(x.platform).toLowerCase(),saleOrderId(x).toLowerCase(),saleProductId(x).toLowerCase(),clean(pickFirst(x,["managementNumber","商品管理番号"],"")).toLowerCase(),saleQuantity(x)].join("||")}
+function preferSalesRow(a,b){const ap=saleUnitPriceJPY(a)>0?1:0,bp=saleUnitPriceJPY(b)>0?1:0;if(ap!==bp)return bp>ap?b:a;const au=salesUpdatedMs(a),bu=salesUpdatedMs(b);return bu>=au?b:a}
+async function loadSales(){const s=await getDocs(collection(db,"sales")),raw=s.docs.map(d=>({id:d.id,...d.data()})),m=new Map();raw.forEach(x=>{const k=salesLogicalKey(x),old=m.get(k);m.set(k,old?preferSalesRow(old,x):x)});state.sales=[...m.values()]}
 async function loadLogs(){const s=await getDocs(collection(db,"shipmentCosts"));state.logs=s.docs.map(d=>({id:d.id,...d.data()}))}
 async function loadVendors(){const s=await getDocs(collection(db,"vendorSettlementSettings"));state.vendors=s.docs.map(d=>({id:d.id,...d.data()}))}
 async function loadProducts(){const s=await getDocs(collection(db,"products"));state.products=s.docs.map(d=>({id:d.id,...d.data()}))}
@@ -70,7 +73,7 @@ function saleLineAmountJPY(s){return saleUnitPriceJPY(s)*saleQuantity(s)}
 function saleOrderId(s){return clean(pickFirst(s,["orderId","orderNumber","orderNo","注文番号"],""))}
 function saleProductId(s){return clean(pickFirst(s,["productId","sku","itemNumber","商品番号"],""))}
 function saleMonth(s){const direct=clean(pickFirst(s,["month","saleMonth"],""));if(direct)return direct.slice(0,7);const d=clean(pickFirst(s,["date","orderDate","saleDate","注文日"],""));const mm=d.match(/(\d{4})[-\/]?(\d{1,2})/);return mm?`${mm[1]}-${String(mm[2]).padStart(2,"0")}`:""}
-function monthlyAdjFor(s){return state.adjustments.find(a=>a.salesId===s.id||a.id===s.id)||{}}
+function monthlyAdjFor(s){return state.adjustments.find(a=>a.salesId===s.id||a.id===s.id||(clean(a.orderId)===saleOrderId(s)&&clean(a.productId)===saleProductId(s)))||{}}
 function productFor(s){
   const sku=saleProductId(s).toLowerCase();
   const mgmt=clean(pickFirst(s,["managementNumber","productManagementNumber","商品管理番号"],"")).toLowerCase();
