@@ -2,3 +2,61 @@
 
 /* V1.2 月結明細 */
 .hidden{display:none!important}.column-panel{display:flex;gap:10px;flex-wrap:wrap;padding:10px;margin:8px 0;background:#fff;border:1px solid #e5e7eb;border-radius:10px}.column-panel label{font-size:13px}.monthly-table-wrap table{width:max-content;min-width:100%}.monthly-table-wrap th,.monthly-table-wrap td{width:auto;max-width:220px}.monthly-table-wrap .product-name{min-width:150px;max-width:220px;overflow:hidden;text-overflow:ellipsis}.cell-system,.cell-calc{background:#f3f4f6}.cell-edit{background:#fff}.monthly-table-wrap th{position:sticky;top:0;z-index:1}.monthly-table-wrap td{vertical-align:middle}.monthly-table-wrap input[type=checkbox]{padding:0}
+
+
+/* V1.3 月結 UI 優化 */
+#monthly.page{padding:12px 14px 14px}
+#monthly .card{padding:12px;margin-bottom:10px}
+#monthly h2{margin:0 0 8px;font-size:18px}
+#monthly .toolbar{gap:6px;margin-bottom:6px}
+#monthly .toolbar input,#monthly .toolbar select,#monthly .toolbar button{padding:6px 8px;font-size:13px}
+#monthly .note{font-size:12px;margin:6px 0}
+.monthly-summary{font-size:12px;color:#6b7280;padding:5px 8px;background:#fff;border:1px solid #e5e7eb;border-bottom:0;border-radius:10px 10px 0 0}
+.monthly-table-wrap{height:calc(100vh - 245px);min-height:360px;overflow:auto;border-radius:0 0 10px 10px}
+.monthly-table-wrap table{width:max-content;min-width:100%;table-layout:auto;font-size:12px}
+.monthly-table-wrap th,.monthly-table-wrap td{padding:6px 8px;height:34px;max-width:none}
+.monthly-table-wrap thead th{position:sticky;top:0;z-index:4;background:#f3f4f6;border-bottom:1px solid #d1d5db}
+.monthly-filter-row th{top:34px!important;background:#eef2f7!important;padding:4px 5px!important;z-index:3!important}
+.column-filter{width:100%;min-width:72px;max-width:180px;padding:3px 5px!important;font-size:11px!important;border-radius:5px!important}
+.monthly-table-wrap .col-select{min-width:44px;width:44px;text-align:center;position:sticky;left:0;background:#fff;z-index:2}
+.monthly-table-wrap th.col-select{left:0;z-index:6}
+.monthly-table-wrap .col-month{min-width:82px}
+.monthly-table-wrap .col-purchaseDate{min-width:82px}
+.monthly-table-wrap .col-projectType{min-width:92px}
+.monthly-table-wrap .col-vendorName{min-width:92px}
+.monthly-table-wrap .col-orderId{min-width:235px;max-width:280px}
+.monthly-table-wrap .col-origin{min-width:74px;width:74px;text-align:center}
+.monthly-table-wrap .col-productName{min-width:175px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+.monthly-table-wrap .col-productId{min-width:135px}
+.monthly-table-wrap .col-unitPriceJPY,.monthly-table-wrap .col-quantity,.monthly-table-wrap .col-salesAmountJPY{min-width:92px;text-align:right}
+.monthly-table-wrap .col-action{min-width:70px}
+.missing-value{background:#fff7ed!important;color:#c2410c;font-weight:600}
+@media(max-width:900px){aside{width:190px}main{margin-left:190px}.monthly-table-wrap{height:calc(100vh - 270px)}#monthly .toolbar{align-items:stretch}.monthly-table-wrap .col-orderId{min-width:210px}}
+
+
+/* V1.4 Data-grid UI Refresh — high readability, compact operations */
+:root{--vs-bg:#f6f8fb;--vs-surface:#ffffff;--vs-text:#243247;--vs-muted:#6b778c;--vs-line:#e3e8ef;--vs-head:#f1f4f8;--vs-head2:#e9eef5;--vs-blue:#2457a6;--vs-blue-soft:#eef5ff;--vs-green:#edf8f1;--vs-orange:#fff7ed;--vs-red:#fff0f0}
+body{background:var(--vs-bg);color:var(--vs-text);font-size:13px}
+aside{background:#172033;border-right:1px solid #202b42;padding:18px 14px;width:218px}
+aside h1{font-size:17px;letter-spacing:.1px}aside small{display:inline-block;margin-top:5px;color:#9fb0ca}nav{gap:3px;margin-top:16px}nav button{font-size:13px;padding:9px 10px;border-radius:6px;color:#cbd6e7}nav button.active{background:#263552;color:#fff;font-weight:600}nav button:hover{background:#21304b;color:#fff}
+main{margin-left:218px}header{height:54px;padding:9px 14px;border-bottom:1px solid var(--vs-line);box-shadow:0 1px 4px rgba(30,45,70,.04)}header strong{font-size:15px;color:#1f2d43}header input,header button{padding:6px 8px;font-size:12px}
+.page{padding:12px 14px}.card{border:1px solid var(--vs-line);border-radius:7px;padding:12px;box-shadow:none;background:var(--vs-surface)}
+.section-heading{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px}.section-heading h2{margin:0;font-size:17px;color:#1e2b3d}.section-heading span{display:block;margin-top:2px;color:var(--vs-muted);font-size:11px}
+.toolbar{gap:5px}.toolbar input,.toolbar select,.toolbar button{height:30px;padding:5px 8px;font-size:12px;border-radius:5px;border-color:#cfd7e3}.toolbar button{color:#243247}.toolbar button:hover{background:var(--vs-blue-soft);border-color:#b9cbea;color:var(--vs-blue)}
+.note{color:var(--vs-muted);font-size:11px}
+.monthly-summary{border-radius:5px 5px 0 0;background:#fff;color:#647187;padding:5px 8px}
+.monthly-table-wrap{height:calc(100vh - 222px);min-height:410px;border:1px solid var(--vs-line);border-radius:0 0 5px 5px;background:#fff}
+.monthly-table-wrap table{font-size:12px;color:#253349;border-collapse:separate;border-spacing:0}
+.monthly-table-wrap th,.monthly-table-wrap td{height:34px;padding:6px 9px;border-right:1px solid #eef1f5;border-bottom:1px solid #e6ebf1;background:#fff}
+.monthly-table-wrap thead th{background:var(--vs-head);color:#23344d;font-weight:700;border-bottom:1px solid #cfd7e2;box-shadow:inset 0 -1px 0 #dde3eb}
+.monthly-filter-row th{background:var(--vs-head2)!important;border-bottom:1px solid #d9e0e9!important;height:30px;padding:3px 5px!important}
+.column-filter{height:23px!important;background:#fff!important;border:1px solid #cad3df!important;color:#43516a!important;font-size:10.5px!important;min-width:74px;max-width:170px}
+.monthly-table-wrap tbody tr:nth-child(even) td{background:#fbfcfe}.monthly-table-wrap tbody tr:hover td{background:#f3f7fd!important}
+.monthly-table-wrap .cell-system{background:#fbfcfe}.monthly-table-wrap .cell-calc{background:#f7faff}.monthly-table-wrap .cell-edit{background:#fff}.monthly-table-wrap tbody tr:hover .cell-calc{background:#edf5ff!important}
+.monthly-table-wrap .numeric-cell{text-align:right;font-variant-numeric:tabular-nums;color:#20324d}.monthly-table-wrap .id-text{color:#244f8f;font-weight:500}.monthly-table-wrap .product-name{font-weight:500;color:#263b5c}
+.monthly-table-wrap .col-select{width:40px;min-width:40px}.monthly-table-wrap .col-month{min-width:78px}.monthly-table-wrap .col-purchaseDate{min-width:78px}.monthly-table-wrap .col-projectType{min-width:90px}.monthly-table-wrap .col-vendorName{min-width:90px}.monthly-table-wrap .col-orderId{min-width:245px;max-width:285px}.monthly-table-wrap .col-origin{min-width:62px;width:62px}.monthly-table-wrap .col-productName{min-width:180px;max-width:210px}.monthly-table-wrap .col-productId{min-width:130px}.monthly-table-wrap .col-unitPriceJPY,.monthly-table-wrap .col-quantity,.monthly-table-wrap .col-salesAmountJPY{min-width:84px}.monthly-table-wrap .col-vendorCampaignName,.monthly-table-wrap .col-ourCampaignName{min-width:155px}.monthly-table-wrap .col-note{min-width:150px;max-width:220px}
+.monthly-table-wrap .missing-value{background:var(--vs-orange)!important;color:#b45309}.column-panel{border-radius:6px;background:#fff;box-shadow:0 6px 22px rgba(27,42,66,.08);border-color:#d7dee8}.column-panel label{color:#34435b}
+.progress{height:8px;border-radius:4px}.progress>div{background:#4b6fa8}
+.kpi{border-radius:7px;border-color:var(--vs-line);box-shadow:none}.kpi b{color:#1f3658;font-size:21px}
+.table-wrap:not(.monthly-table-wrap) table{font-size:12px}.table-wrap:not(.monthly-table-wrap) th{background:var(--vs-head);color:#23344d;font-weight:700}.table-wrap:not(.monthly-table-wrap) tbody tr:nth-child(even) td{background:#fbfcfe}.table-wrap:not(.monthly-table-wrap) tbody tr:hover td{background:#f3f7fd}
+@media(max-width:1050px){aside{width:190px}main{margin-left:190px}.monthly-table-wrap{height:calc(100vh - 250px)}header{height:auto;min-height:54px;align-items:flex-start}.monthly-table-wrap .col-orderId{min-width:220px}}

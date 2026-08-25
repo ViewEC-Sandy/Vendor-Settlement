@@ -57,17 +57,32 @@ const MONTHLY_COLS=[
 ];
 const monthlyVisible=new Set(JSON.parse(localStorage.getItem("vsdMonthlyColumns")||"null")||MONTHLY_COLS.filter(c=>c.default).map(c=>c.key));
 function pickFirst(obj,keys,def=""){for(const k of keys){if(obj?.[k]!==undefined&&obj?.[k]!==null&&clean(obj[k])!=="")return obj[k]}return def}
-function saleUnitPriceJPY(s){return num(pickFirst(s,["unitPriceJPY","unitPrice","priceJPY","price","salePriceJPY","単価"],0))}
+function saleUnitPriceJPY(s){
+  const direct=pickFirst(s,["unitPriceJPY","unitPrice","lineUnitPriceJPY","lineUnitPrice","itemUnitPrice","itemPrice","priceJPY","price","salePriceJPY","単価","商品単価"],"");
+  if(clean(direct)!=="")return num(direct);
+  const qty=saleQuantity(s);
+  const lineTotal=pickFirst(s,["lineAmountJPY","itemAmountJPY","lineTotalJPY","itemTotalJPY"],"");
+  if(qty>0&&clean(lineTotal)!=="")return num(lineTotal)/qty;
+  return 0;
+}
 function saleQuantity(s){const v=pickFirst(s,["quantity","qty","units","count","個数"],1);return Math.max(0,num(v)||0)}
 function saleLineAmountJPY(s){return saleUnitPriceJPY(s)*saleQuantity(s)}
 function saleOrderId(s){return clean(pickFirst(s,["orderId","orderNumber","orderNo","注文番号"],""))}
 function saleProductId(s){return clean(pickFirst(s,["productId","sku","itemNumber","商品番号"],""))}
 function saleMonth(s){const direct=clean(pickFirst(s,["month","saleMonth"],""));if(direct)return direct.slice(0,7);const d=clean(pickFirst(s,["date","orderDate","saleDate","注文日"],""));const mm=d.match(/(\d{4})[-\/]?(\d{1,2})/);return mm?`${mm[1]}-${String(mm[2]).padStart(2,"0")}`:""}
 function monthlyAdjFor(s){return state.adjustments.find(a=>a.salesId===s.id||a.id===s.id)||{}}
-function productFor(s){const sku=saleProductId(s).toLowerCase();return state.products.find(p=>[p.id,p.productId,p.productNumber,p.sku,p.specManagementId].some(v=>clean(v).toLowerCase()===sku))||{}}
+function productFor(s){
+  const sku=saleProductId(s).toLowerCase();
+  const mgmt=clean(pickFirst(s,["managementNumber","productManagementNumber","商品管理番号"],"")).toLowerCase();
+  return state.products.find(p=>{
+    const ids=[p.id,p.productId,p.productNumber,p.sku,p.specManagementId,p.商品番号].map(v=>clean(v).toLowerCase()).filter(Boolean);
+    const mids=[p.managementNumber,p.productManagementId,p.productManagementNumber,p.商品管理番号].map(v=>clean(v).toLowerCase()).filter(Boolean);
+    return (sku&&ids.includes(sku))||(mgmt&&mids.includes(mgmt));
+  })||{};
+}
 function vendorSettingFor(name){const k=clean(name).toLowerCase();return state.vendors.find(v=>clean(v.vendorName).toLowerCase()===k)||{}}
 function monthParamFor(month){return state.params.find(p=>clean(p.month||p.id).slice(0,7)===month)||{}}
-function effectiveProductName(s,p){return clean(pickFirst(s,["productName","name","itemName","商品名"],pickFirst(p,["nameZh","title","productName","name"],"")))}
+function effectiveProductName(s,p){return clean(pickFirst(p,["nameZh","chineseName","nameZH","中文商品名","中文品名"],pickFirst(s,["productName","name","itemName","商品名"],pickFirst(p,["title","productName","name"],""))))}
 function monthlyRow(s){
   const a=monthlyAdjFor(s),p=productFor(s),month=saleMonth(s),vname=clean(a.vendorName||pickFirst(p,["vendorName","vendor","supplierName"],""));
   const vs=vendorSettingFor(vname),mp=monthParamFor(month),unit=saleUnitPriceJPY(s),qty=saleQuantity(s),sales=unit*qty;
@@ -80,17 +95,56 @@ function monthlyRow(s){
   return {salesId:s.id,month,purchaseDate:a.purchaseDate||"",projectType:a.projectType||vs.defaultProject||"",vendorName:vname,orderId:saleOrderId(s),origin:a.origin||pickFirst(p,["origin","shippingOrigin"],""),productName:effectiveProductName(s,p),productId:saleProductId(s),unitPriceJPY:unit,quantity:qty,salesAmountJPY:sales,vendorDiscountRate:rate,vendorCampaignName:a.vendorCampaignName||"",ourDiscountJPY:ourDisc,ourCampaignName:a.ourCampaignName||"",pointsMultiplier:a.pointsMultiplier||"",pointsCostJPY:a.pointsCostJPY||"",discountedFinalJPY:discounted,fxRate:fx,discountedTWD,rakutenFeeTWD:rkFee,settlementType:st,commissionRate:comm,vendorPaymentTWD:payment,note:a.note||"",_sales:s,_adj:a};
 }
 function fmtMonthly(key,v){if(["unitPriceJPY","salesAmountJPY","ourDiscountJPY","pointsCostJPY","discountedFinalJPY"].includes(key))return v===""?"":Math.round(num(v)).toLocaleString();if(["discountedTWD","rakutenFeeTWD","vendorPaymentTWD"].includes(key))return v===""?"":num(v).toFixed(2);if(["vendorDiscountRate","commissionRate"].includes(key))return v===""?"":`${(num(v)*100).toFixed(1).replace(/\.0$/,"")}%`;if(key==="fxRate")return v?num(v).toFixed(6):"";return clean(v)}
-function monthlyFilteredRows(){const q=clean($("monthlySearch").value).toLowerCase(),m=$("monthlyMonth").value,pr=clean($("monthlyProject").value).toLowerCase(),ve=clean($("monthlyVendor").value).toLowerCase(),st=$("monthlySettlement").value;return state.sales.map(monthlyRow).filter(r=>(!q||[r.orderId,r.productId,r.productName,r.vendorName].some(x=>clean(x).toLowerCase().includes(q)))&&(!m||r.month===m)&&(!pr||clean(r.projectType).toLowerCase().includes(pr))&&(!ve||clean(r.vendorName).toLowerCase().includes(ve))&&(!st||r.settlementType===st))}
-function renderMonthly(){const cols=MONTHLY_COLS.filter(c=>monthlyVisible.has(c.key)),rows=monthlyFilteredRows();$("monthlyTable").innerHTML=`<thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>{
-    if(c.key==="select")return `<td><input type="checkbox" class="monthly-select" value="${esc(r.salesId)}"></td>`;
-    if(c.key==="action")return `<td><button data-edit-monthly="${esc(r.salesId)}">編輯</button></td>`;
-    let display=fmtMonthly(c.key,r[c.key]); if(c.key==="productName"){const full=clean(r.productName),short=full.length>15?full.slice(0,15)+"…":full;return `<td class="cell-system product-name" title="${esc(full)}">${esc(short)}</td>`}
-    return `<td class="cell-${c.kind}">${esc(display)}</td>`;
+const monthlyFieldFilters={};
+let monthlyFieldFiltersVisible=true;
+function monthlyRawFilterValue(key,v){
+  if(v===undefined||v===null||v==="")return "（空白）";
+  return fmtMonthly(key,v)||"（空白）";
+}
+function monthlyFilterOptions(rows,key){
+  const values=[...new Set(rows.map(r=>monthlyRawFilterValue(key,r[key])))].sort((a,b)=>a.localeCompare(b,'zh-Hant',{numeric:true}));
+  return values.slice(0,300);
+}
+function passesMonthlyFieldFilters(row){
+  return Object.entries(monthlyFieldFilters).every(([key,value])=>!value||monthlyRawFilterValue(key,row[key])===value);
+}
+function monthlyBaseRows(){
+  const q=clean($("monthlySearch").value).toLowerCase(),m=$("monthlyMonth").value,pr=clean($("monthlyProject").value).toLowerCase(),ve=clean($("monthlyVendor").value).toLowerCase(),st=$("monthlySettlement").value;
+  return state.sales.map(monthlyRow).filter(r=>(!q||[r.orderId,r.productId,r.productName,r.vendorName].some(x=>clean(x).toLowerCase().includes(q)))&&(!m||r.month===m)&&(!pr||clean(r.projectType).toLowerCase().includes(pr))&&(!ve||clean(r.vendorName).toLowerCase().includes(ve))&&(!st||r.settlementType===st));
+}
+function monthlyFilteredRows(){return monthlyBaseRows().filter(passesMonthlyFieldFilters)}
+function renderMonthly(){
+  const cols=MONTHLY_COLS.filter(c=>monthlyVisible.has(c.key));
+  const baseRows=monthlyBaseRows(),rows=baseRows.filter(passesMonthlyFieldFilters);
+  const filterRow=monthlyFieldFiltersVisible?`<tr class="monthly-filter-row">${cols.map(c=>{
+    if(["select","action"].includes(c.key))return '<th></th>';
+    const options=monthlyFilterOptions(baseRows,c.key),selected=monthlyFieldFilters[c.key]||"";
+    return `<th><select class="column-filter" data-month-filter="${esc(c.key)}" title="篩選 ${esc(c.label)}"><option value="">全部</option>${options.map(v=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(v)}</option>`).join('')}</select></th>`;
+  }).join('')}</tr>`:'';
+  $("monthlyTable").innerHTML=`<thead><tr>${cols.map(c=>`<th class="col-${esc(c.key)}">${esc(c.label)}</th>`).join("")}</tr>${filterRow}</thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>{
+    if(c.key==="select")return `<td class="col-select"><input type="checkbox" class="monthly-select" value="${esc(r.salesId)}"></td>`;
+    if(c.key==="action")return `<td class="col-action"><button data-edit-monthly="${esc(r.salesId)}">編輯</button></td>`;
+    const cls=c.kind==="edit"?"cell-edit":"cell-"+c.kind;
+    let display=fmtMonthly(c.key,r[c.key]);
+    if(c.key==="productName"){
+      const full=clean(r.productName),short=full.length>15?full.slice(0,15)+"…":full;
+      return `<td class="${cls} product-name col-productName" title="${esc(full)}">${esc(short||'未對應商品主檔')}</td>`;
+    }
+    if(c.key==="unitPriceJPY"&&num(r.unitPriceJPY)===0)return `<td class="${cls} col-unitPriceJPY missing-value" title="原始 sales 明細缺少可辨識的單價欄位">—</td>`;
+    return `<td class="${cls} col-${esc(c.key)}">${esc(display)}</td>`;
   }).join("")}</tr>`).join("")}</tbody>`;
   document.querySelectorAll("[data-edit-monthly]").forEach(b=>b.onclick=()=>editMonthlyAdjustment(b.dataset.editMonthly));
+  document.querySelectorAll("[data-month-filter]").forEach(sel=>sel.onchange=()=>{
+    if(sel.value)monthlyFieldFilters[sel.dataset.monthFilter]=sel.value;else delete monthlyFieldFilters[sel.dataset.monthFilter];
+    renderMonthly();
+  });
+  const active=Object.entries(monthlyFieldFilters).filter(([,v])=>v);
+  $("monthlyFilterSummary").innerHTML=`顯示 <strong>${rows.length.toLocaleString()}</strong> / ${baseRows.length.toLocaleString()} 筆${active.length?`　｜　欄位篩選：${active.map(([k,v])=>`${MONTHLY_COLS.find(c=>c.key===k)?.label||k}=${esc(v)}`).join('、')}`:''}`;
 }
 function renderMonthlyColumns(){const panel=$("monthlyColumnsPanel");panel.innerHTML=MONTHLY_COLS.filter(c=>!["select","action"].includes(c.key)).map(c=>`<label><input type="checkbox" data-month-col="${c.key}" ${monthlyVisible.has(c.key)?"checked":""}> ${esc(c.label)}</label>`).join("")+`<div><button id="monthlyColsDefault">恢復預設</button></div>`;document.querySelectorAll("[data-month-col]").forEach(x=>x.onchange=()=>{x.checked?monthlyVisible.add(x.dataset.monthCol):monthlyVisible.delete(x.dataset.monthCol);localStorage.setItem("vsdMonthlyColumns",JSON.stringify([...monthlyVisible]));renderMonthly()});$("monthlyColsDefault").onclick=()=>{monthlyVisible.clear();MONTHLY_COLS.filter(c=>c.default).forEach(c=>monthlyVisible.add(c.key));localStorage.setItem("vsdMonthlyColumns",JSON.stringify([...monthlyVisible]));renderMonthlyColumns();renderMonthly()}}
 $("monthlyColumnsBtn").onclick=()=>{$("monthlyColumnsPanel").classList.toggle("hidden");renderMonthlyColumns()};
+$("monthlyFilterToggle").onclick=()=>{monthlyFieldFiltersVisible=!monthlyFieldFiltersVisible;renderMonthly()};
+$("monthlyClearFilters").onclick=()=>{Object.keys(monthlyFieldFilters).forEach(k=>delete monthlyFieldFilters[k]);$("monthlySearch").value="";$("monthlyMonth").value="";$("monthlyProject").value="";$("monthlyVendor").value="";$("monthlySettlement").value="";renderMonthly()};
 ["monthlySearch","monthlyProject","monthlyVendor"].forEach(id=>$(id).oninput=renderMonthly);$("monthlyMonth").onchange=renderMonthly;$("monthlySettlement").onchange=renderMonthly;
 $("monthlyRefresh").onclick=async()=>{await Promise.all([loadSales(),loadProducts(),loadAdjustments(),loadVendors(),loadParams()]);renderMonthly()};
 const ADJ_COLS=[["purchaseDate","叫貨日"],["projectType","專案類型"],["vendorName","廠商名"],["origin","發貨地(TW/JP)"],["vendorDiscountRate","折數(廠商負擔，例如80%或0.8)"],["vendorCampaignName","活動名稱(廠商負擔)"],["ourDiscountJPY","折扣額(我方負擔/JPY)"],["ourCampaignName","活動名稱(我方負擔)"],["pointsMultiplier","點數倍率"],["pointsCostJPY","點數成本(JPY)"],["settlementType","結帳方式"],["commissionRate","個別抽成率(選填)"],["note","備註"]];
